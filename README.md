@@ -13,8 +13,8 @@
 
 ## 使用方法
 
-1. 复制 `config.json.example` 为 `config.json`
-2. 编辑 `config.json`，设置你的 Mod 搜索目录
+1. 复制 `config.ini.example` 为 `config.ini`
+2. 编辑 `config.ini`，设置你的 Mod 搜索目录
 3. 运行任意脚本，例如：
    ```bash
    python "1A-1-递归搜索-EquipmentID.py"
