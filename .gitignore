@@ -2,7 +2,7 @@
 *.bak
 
 # 真实配置文件（包含本地路径，不应提交）
-config.json
+config.ini
 
 # Python 缓存
 __pycache__/

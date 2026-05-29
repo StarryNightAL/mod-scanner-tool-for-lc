@@ -3,6 +3,26 @@ import re
 import sys
 import json
 from datetime import datetime
+import configparser
+
+def get_search_root_from_config(default_root=None):
+    """从脚本所在目录的config.ini中读取target_scan_path，若失败则返回default_root"""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(script_dir, 'config.ini')
+    if os.path.isfile(config_path):
+        try:
+            config = configparser.ConfigParser()
+            config.read(config_path, encoding='utf-8')
+            path = config.get('CORE', 'target_scan_path', fallback=None)
+            if path:
+                path = path.strip()
+                # 相对路径转换为相对于脚本目录的绝对路径
+                if not os.path.isabs(path):
+                    path = os.path.join(script_dir, path)
+                return path
+        except Exception:
+            pass
+    return default_root if default_root is not None else os.getcwd()
 
 # 颜色代码
 class Colors:
@@ -10,23 +30,6 @@ class Colors:
     RED = '\033[91m'
     CYAN = '\033[96m'
     RESET = '\033[0m'
-
-def get_search_root_from_config(default_root=None):
-    """从脚本所在目录的config.json中读取target_scan_path，若失败则返回default_root"""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(script_dir, 'config.json')
-    if os.path.isfile(config_path):
-        try:
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-                path = config.get('target_scan_path')
-                if path:
-                    if not os.path.isabs(path):
-                        path = os.path.join(script_dir, path)
-                    return path
-        except Exception:
-            pass
-    return default_root if default_root is not None else os.getcwd()
 
 def extract_equipment_ids_and_info(file_path):
     """
