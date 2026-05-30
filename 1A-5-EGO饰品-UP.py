@@ -5,39 +5,10 @@ import glob
 from pathlib import Path
 import time
 import xml.etree.ElementTree as ET
-import configparser
+import common   # 导入公共模块
 
-def get_search_root_from_config(default_root=None):
-    """从脚本所在目录的config.ini中读取target_scan_path，若失败则返回default_root"""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(script_dir, 'config.ini')
-    if os.path.isfile(config_path):
-        try:
-            config = configparser.ConfigParser()
-            config.read(config_path, encoding='utf-8')
-            path = config.get('CORE', 'target_scan_path', fallback=None)
-            if path:
-                path = path.strip()
-                # 相对路径转换为相对于脚本目录的绝对路径
-                if not os.path.isabs(path):
-                    path = os.path.join(script_dir, path)
-                return path
-        except Exception:
-            pass
-    return default_root if default_root is not None else os.getcwd()
-
-SEARCH_ROOT = get_search_root_from_config()
-
-# 颜色代码
-class Colors:
-    GREEN = '\033[92m'
-    BLUE = '\033[94m'
-    CYAN = '\033[96m'
-    RED = '\033[91m'
-    WHITE = '\033[97m'
-    YELLOW = '\033[93m'
-    BOLD = '\033[1m'
-    END = '\033[0m'
+# 从config读取搜索根目录
+SEARCH_ROOT = common.get_search_root_from_config()
 
 # 要忽略的文件夹
 IGNORE_FOLDERS = [
@@ -96,11 +67,11 @@ def extract_equipment_name(equipment_content):
 def format_value(value):
     """格式化数值并添加颜色"""
     if value > 0:
-        return f"{Colors.CYAN}{value:>5}{Colors.END}"
+        return f"{common.Colors.CYAN}{value:>5}{common.Colors.END}"
     elif value < 0:
-        return f"{Colors.RED}{value:>5}{Colors.END}"
+        return f"{common.Colors.RED}{value:>5}{common.Colors.END}"
     else:
-        return f"{Colors.WHITE}{value:>5}{Colors.END}"
+        return f"{common.Colors.WHITE}{value:>5}{common.Colors.END}"
 
 def should_ignore_file(file_path):
     """检查文件是否在忽略的文件夹中"""
@@ -244,10 +215,10 @@ def extract_equipment_info():
 def display_results(results, file_accessory_count):
     """显示结果"""
     print("\n" + "="*120)
-    print(f"{Colors.BOLD}饰品详细信息 (按上游文件夹修改时间排序):{Colors.END}")
+    print(f"{common.Colors.BOLD}饰品详细信息 (按上游文件夹修改时间排序):{common.Colors.END}")
     print("="*120)
     
-    header = f"{Colors.BOLD}{'文件':<25} {'ID':>10} {'位置':>10} {'类型':>8} {'生命':>5} {'精神':>5} {'成功率':>6} {'工作速度':>6} {'攻击速度':>5} {'移动速度':>6}{Colors.END}"
+    header = f"{common.Colors.BOLD}{'文件':<25} {'ID':>10} {'位置':>10} {'类型':>8} {'生命':>5} {'精神':>5} {'成功率':>6} {'工作速度':>6} {'攻击速度':>5} {'移动速度':>6}{common.Colors.END}"
     print(header)
     print("-"*120)
     
@@ -263,19 +234,19 @@ def display_results(results, file_accessory_count):
         else:
             filename_display = filename
         
-        colored_filename = f"{Colors.GREEN}{filename_display:<25}{Colors.END}"
-        colored_id = f"{Colors.BLUE}{result['equipment_id']:>10}{Colors.END}"
-        colored_pos = f"{Colors.YELLOW}{result['attach_pos']:>10}{Colors.END}"
-        colored_type = f"{Colors.CYAN}{result['attach_type']:>8}{Colors.END}"
+        colored_filename = f"{common.Colors.GREEN}{filename_display:<25}{common.Colors.END}"
+        colored_id = f"{common.Colors.BLUE}{result['equipment_id']:>10}{common.Colors.END}"
+        colored_pos = f"{common.Colors.YELLOW}{result['attach_pos']:>10}{common.Colors.END}"
+        colored_type = f"{common.Colors.CYAN}{result['attach_type']:>8}{common.Colors.END}"
         
         line = f"{colored_filename} {colored_id} {colored_pos} {colored_type} {format_value(attrs['hp'])} {format_value(attrs['mental'])} {format_value(attrs['workProb'])} {format_value(attrs['cubeSpeed'])} {format_value(attrs['attackSpeed'])} {format_value(attrs['movement'])}"
         print(line)
     
     print("\n" + "="*100)
-    print(f"{Colors.BOLD}中文名称 (每个饰品):{Colors.END}")
+    print(f"{common.Colors.BOLD}中文名称 (每个饰品):{common.Colors.END}")
     print("="*100)
     
-    chinese_header = f"{Colors.BOLD}{'文件':<25} {'装备ID':<10} {'中文名称':<30} {'状态':<30}{Colors.END}"
+    chinese_header = f"{common.Colors.BOLD}{'文件':<25} {'装备ID':<10} {'中文名称':<30} {'状态':<30}{common.Colors.END}"
     print(chinese_header)
     print("-"*100)
     
@@ -291,44 +262,44 @@ def display_results(results, file_accessory_count):
             filename_display = filename
         
         if chinese_name:
-            status_color = Colors.GREEN
+            status_color = common.Colors.GREEN
         elif "not_found" in status or "error" in status:
-            status_color = Colors.RED
+            status_color = common.Colors.RED
         else:
-            status_color = Colors.YELLOW
+            status_color = common.Colors.YELLOW
             
-        colored_filename = f"{Colors.GREEN}{filename_display:<25}{Colors.END}"
-        colored_id = f"{Colors.BLUE}{equipment_id:<10}{Colors.END}"
-        colored_chinese = f"{Colors.CYAN}{chinese_name:<30}{Colors.END}" if chinese_name else f"{Colors.WHITE}{'N/A':<30}{Colors.END}"
-        colored_status = f"{status_color}{status:<30}{Colors.END}"
+        colored_filename = f"{common.Colors.GREEN}{filename_display:<25}{common.Colors.END}"
+        colored_id = f"{common.Colors.BLUE}{equipment_id:<10}{common.Colors.END}"
+        colored_chinese = f"{common.Colors.CYAN}{chinese_name:<30}{common.Colors.END}" if chinese_name else f"{common.Colors.WHITE}{'N/A':<30}{common.Colors.END}"
+        colored_status = f"{status_color}{status:<30}{common.Colors.END}"
         
         print(f"{colored_filename} {colored_id} {colored_chinese} {colored_status}")
     
     multi_accessory_files = {file: count for file, count in file_accessory_count.items() if count > 1}
     if multi_accessory_files:
-        print(f"\n{Colors.BOLD}包含多个饰品的文件:{Colors.END}")
+        print(f"\n{common.Colors.BOLD}包含多个饰品的文件:{common.Colors.END}")
         for file_path, count in multi_accessory_files.items():
             filename = os.path.basename(file_path)
-            print(f"  {Colors.YELLOW}{filename}: {count} 个饰品{Colors.END}")
+            print(f"  {common.Colors.YELLOW}{filename}: {count} 个饰品{common.Colors.END}")
 
 def main():
     """主函数"""
-    print(f"{Colors.BOLD}搜索饰品文件中...{Colors.END}")
+    print(f"{common.Colors.BOLD}搜索饰品文件中...{common.Colors.END}")
     print("搜索模式:")
-    print(f"  {Colors.YELLOW}1. {os.path.join(SEARCH_ROOT, '*/*/Equipment/txts/*.txt')}{Colors.END}")
-    print(f"  {Colors.YELLOW}2. {os.path.join(SEARCH_ROOT, '*/*/Equipment/xmls/cn/*.xml')}{Colors.END}")
-    print(f"  {Colors.YELLOW}3. {os.path.join(SEARCH_ROOT, '*/Equipment/txts/*.txt')}{Colors.END}")
-    print(f"  {Colors.YELLOW}4. {os.path.join(SEARCH_ROOT, '*/Equipment/xmls/cn/*.xml')}{Colors.END}")
-    print(f"{Colors.RED}忽略文件夹: {', '.join(IGNORE_FOLDERS)}{Colors.END}")
+    print(f"  {common.Colors.YELLOW}1. {os.path.join(SEARCH_ROOT, '*/*/Equipment/txts/*.txt')}{common.Colors.END}")
+    print(f"  {common.Colors.YELLOW}2. {os.path.join(SEARCH_ROOT, '*/*/Equipment/xmls/cn/*.xml')}{common.Colors.END}")
+    print(f"  {common.Colors.YELLOW}3. {os.path.join(SEARCH_ROOT, '*/Equipment/txts/*.txt')}{common.Colors.END}")
+    print(f"  {common.Colors.YELLOW}4. {os.path.join(SEARCH_ROOT, '*/Equipment/xmls/cn/*.xml')}{common.Colors.END}")
+    print(f"{common.Colors.RED}忽略文件夹: {', '.join(IGNORE_FOLDERS)}{common.Colors.END}")
     print()
     
     results, file_accessory_count = extract_equipment_info()
     
     if not results:
-        print(f"{Colors.RED}未找到匹配的饰品!{Colors.END}")
+        print(f"{common.Colors.RED}未找到匹配的饰品!{common.Colors.END}")
         return
     
-    print(f"\n{Colors.GREEN}找到 {len(results)} 个饰品{Colors.END}")
+    print(f"\n{common.Colors.GREEN}找到 {len(results)} 个饰品{common.Colors.END}")
     
     display_results(results, file_accessory_count)
     
@@ -336,12 +307,12 @@ def main():
     accessories_with_chinese = sum(1 for r in results if r['chinese_name'])
     multi_accessory_files = len([count for count in file_accessory_count.values() if count > 1])
     
-    print(f"\n{Colors.BOLD}统计信息:{Colors.END}")
-    print(f"  {Colors.WHITE}总饰品数: {len(results)}{Colors.END}")
-    print(f"  {Colors.WHITE}涉及文件数: {unique_files}{Colors.END}")
-    print(f"  {Colors.WHITE}有中文名称的饰品: {accessories_with_chinese}{Colors.END}")
-    print(f"  {Colors.WHITE}无中文名称的饰品: {len(results) - accessories_with_chinese}{Colors.END}")
-    print(f"  {Colors.WHITE}包含多个饰品的文件: {multi_accessory_files}{Colors.END}")
+    print(f"\n{common.Colors.BOLD}统计信息:{common.Colors.END}")
+    print(f"  {common.Colors.WHITE}总饰品数: {len(results)}{common.Colors.END}")
+    print(f"  {common.Colors.WHITE}涉及文件数: {unique_files}{common.Colors.END}")
+    print(f"  {common.Colors.WHITE}有中文名称的饰品: {accessories_with_chinese}{common.Colors.END}")
+    print(f"  {common.Colors.WHITE}无中文名称的饰品: {len(results) - accessories_with_chinese}{common.Colors.END}")
+    print(f"  {common.Colors.WHITE}包含多个饰品的文件: {multi_accessory_files}{common.Colors.END}")
 
 if __name__ == "__main__":
     main()

@@ -3,107 +3,16 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime
-import configparser
+import common   # 导入公共模块
 
-def get_search_root_from_config(default_root=None):
-    """从脚本所在目录的config.ini中读取target_scan_path，若失败则返回default_root"""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(script_dir, 'config.ini')
-    if os.path.isfile(config_path):
-        try:
-            config = configparser.ConfigParser()
-            config.read(config_path, encoding='utf-8')
-            path = config.get('CORE', 'target_scan_path', fallback=None)
-            if path:
-                path = path.strip()
-                # 相对路径转换为相对于脚本目录的绝对路径
-                if not os.path.isabs(path):
-                    path = os.path.join(script_dir, path)
-                return path
-        except Exception:
-            pass
-    return default_root if default_root is not None else os.getcwd()
-
-# 定义等级映射
-GRADE_MAPPING = {
-    '1': 'ZAYIN',
-    '2': 'TETH', 
-    '3': 'HE',
-    '4': 'WAW',
-    '5': 'ALEPH'
-}
-
-def should_process_file(file_path):
-    """判断是否应该处理该文件"""
-    filename = os.path.basename(file_path)
-    
-    # 跳过 BaseEquipment.txt 文件
-    if filename.lower() == "baseequipment.txt":
-        return False
-    
-    # 只处理 .txt 和 .xml 文件
-    ext = os.path.splitext(file_path)[1].lower()
-    return ext in ('.txt', '.xml')
-
-def map_grade(grade_value):
-    """将数字等级映射为对应的名称"""
-    # 先移除可能的空格
-    grade_value = grade_value.strip() if grade_value else grade_value
-    return GRADE_MAPPING.get(grade_value, grade_value)
-
-def resolve_symlink(path):
-    """解析符号链接，返回真实路径"""
-    try:
-        return os.path.realpath(path)
-    except:
-        return path
-
-def get_mod_folder_and_time(file_path, root_path):
-    """获取文件所属的模组文件夹和修改时间"""
-    try:
-        # 解析符号链接
-        real_file_path = resolve_symlink(file_path)
-        real_root_path = resolve_symlink(root_path)
-        
-        # 获取文件相对于根路径的相对路径
-        try:
-            rel_path = os.path.relpath(real_file_path, real_root_path)
-        except ValueError:
-            # 如果不在同一驱动器，尝试直接使用绝对路径
-            rel_path = real_file_path
-        
-        # 分割相对路径，第一个部分应该是模组文件夹名
-        path_parts = rel_path.split(os.sep)
-        
-        if len(path_parts) > 1 and path_parts[0] != '..' and path_parts[0] != '.':
-            mod_folder_name = path_parts[0]
-            mod_folder_path = os.path.join(real_root_path, mod_folder_name)
-            
-            # 获取模组文件夹的修改时间
-            if os.path.exists(mod_folder_path):
-                mod_time = os.path.getmtime(mod_folder_path)
-                return mod_folder_name, mod_time, mod_folder_path
-            else:
-                return mod_folder_name, None, None
-        else:
-            # 如果文件直接在根路径下，没有模组文件夹
-            return "Root", os.path.getmtime(real_file_path), real_root_path
-            
-    except (ValueError, OSError):
-        # 如果无法获取相对路径或修改时间
-        return "Unknown", None, None
-
+# 注意：以下两个函数是特有路径 "Equipment/xmls/cn"，与common不同，保留
 def find_xmls_cn_directory(mod_folder_path):
     """在模组文件夹中查找Equipment/xmls/cn目录"""
     if not mod_folder_path or not os.path.exists(mod_folder_path):
         return None
-    
-    # 构造正确的路径: 模组文件夹/Equipment/xmls/cn
     xmls_cn_path = os.path.join(mod_folder_path, "Equipment", "xmls", "cn")
-    
     if os.path.exists(xmls_cn_path) and os.path.isdir(xmls_cn_path):
         return xmls_cn_path
-    
     return None
 
 def parse_name_from_xmls(name_id, xmls_cn_directory, debug=False):
@@ -113,7 +22,6 @@ def parse_name_from_xmls(name_id, xmls_cn_directory, debug=False):
             print(f"调试: xmls/cn目录不存在: {xmls_cn_directory}")
         return None
     
-    # 收集xmls/cn目录下所有.xml文件
     xml_files = []
     for file in os.listdir(xmls_cn_directory):
         if file.lower().endswith('.xml'):
@@ -124,18 +32,15 @@ def parse_name_from_xmls(name_id, xmls_cn_directory, debug=False):
         for f in xml_files:
             print(f"  - {os.path.basename(f)}")
     
-    # 检查.xml文件数量
     if len(xml_files) == 0:
         if debug:
             print(f"调试: 在{xmls_cn_directory}中没有找到XML文件")
         return None
     elif len(xml_files) > 1:
-        # 检查是否包含ColoredFixerMod-ReturnoftheRedmist，如果是则跳过警告
         if "ColoredFixerMod-ReturnoftheRedmist" not in xmls_cn_directory:
             print(f"警告: 在{xmls_cn_directory}中发现多个.xml文件，跳过名称解析")
         return None
     
-    # 只有一个.xml文件，解析它
     xml_file = xml_files[0]
     
     if debug:
@@ -143,15 +48,11 @@ def parse_name_from_xmls(name_id, xmls_cn_directory, debug=False):
         print(f"调试: 查找ID: {name_id}")
     
     try:
-        # 方法1: 使用ElementTree解析
         try:
             tree = ET.parse(xml_file)
             root = tree.getroot()
-            
             if debug:
                 print(f"调试: XML根元素: {root.tag}")
-            
-            # 查找所有元素
             for elem in root.iter():
                 elem_id = elem.get('id')
                 if elem_id == name_id:
@@ -163,29 +64,23 @@ def parse_name_from_xmls(name_id, xmls_cn_directory, debug=False):
             if debug:
                 print(f"调试: ElementTree解析失败: {e}")
         
-        # 方法2: 使用正则表达式查找
         with open(xml_file, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read()
             
         if debug:
             print(f"调试: XML文件大小: {len(content)} 字符")
-            # 打印前500个字符查看文件内容
             print(f"调试: XML文件前500字符:\n{content[:500]}")
         
-        # 匹配格式: <text id="ID">文本</text>
         pattern = rf'<text\s+id\s*=\s*["\']{re.escape(name_id)}["\'][^>]*>(.*?)</text>'
         match = re.search(pattern, content, re.DOTALL | re.IGNORECASE)
-        
         if match:
             text = match.group(1).strip()
             if debug:
                 print(f"调试: 通过正则找到文本: {text}")
             return text
         
-        # 方法3: 尝试更宽泛的匹配
         pattern2 = rf'<[^>]+\s+id\s*=\s*["\']{re.escape(name_id)}["\'][^>]*>(.*?)</[^>]+>'
         match2 = re.search(pattern2, content, re.DOTALL | re.IGNORECASE)
-        
         if match2:
             text = match2.group(1).strip()
             if debug:
@@ -193,10 +88,9 @@ def parse_name_from_xmls(name_id, xmls_cn_directory, debug=False):
             return text
             
         if debug:
-            # 尝试查找是否有相似的内容
             print(f"调试: 在XML文件中搜索包含'{name_id}'的行:")
             lines = content.split('\n')
-            for i, line in enumerate(lines[:20]):  # 只查看前20行
+            for i, line in enumerate(lines[:20]):
                 if name_id in line:
                     print(f"  第{i+1}行: {line.strip()}")
             
@@ -209,86 +103,6 @@ def parse_name_from_xmls(name_id, xmls_cn_directory, debug=False):
     
     return None
 
-def find_stat_files(mod_folder_path):
-    """在模组文件夹中查找Creature/Creatures/*_stat.txt文件"""
-    if not mod_folder_path or not os.path.exists(mod_folder_path):
-        return []
-    
-    # 构造Creature/Creatures目录路径
-    creature_path = os.path.join(mod_folder_path, "Creature", "Creatures")
-    
-    if not os.path.exists(creature_path):
-        return []
-    
-    # 查找所有_stat.txt文件
-    stat_files = []
-    for root, dirs, files in os.walk(creature_path):
-        for file in files:
-            if file.lower().endswith('_stat.txt'):
-                stat_files.append(os.path.join(root, file))
-    
-    return stat_files
-
-def parse_stat_file_for_equipment(stat_file):
-    """从_stat.txt文件中提取equipment信息"""
-    equipment_dict = {}
-    
-    try:
-        with open(stat_file, 'r', encoding='utf-8', errors='ignore') as file:
-            content = file.read()
-            
-        # 使用正则表达式匹配<equipment>标签
-        # 匹配格式: <equipment level="4" cost="74" equipId="440001" />
-        equipment_pattern = r'<equipment\s+[^>]*?\s+equipId\s*=\s*["\']([^"\']*)["\'][^>]*?>'
-        equipment_matches = re.findall(equipment_pattern, content, re.IGNORECASE)
-        
-        # 对于每个匹配，提取level, cost, equipId
-        for equip_id in equipment_matches:
-            # 为这个equipId查找完整的标签来提取cost
-            pattern = rf'<equipment\s+[^>]*?\s+equipId\s*=\s*["\']{re.escape(equip_id)}["\'][^>]*?>'
-            match = re.search(pattern, content, re.IGNORECASE)
-            
-            if match:
-                equipment_tag = match.group(0)
-                # 提取cost
-                cost_match = re.search(r'cost\s*=\s*["\']([^"\']*)["\']', equipment_tag, re.IGNORECASE)
-                cost = cost_match.group(1) if cost_match else "N/A"
-                
-                # 提取level（可选）
-                level_match = re.search(r'level\s*=\s*["\']([^"\']*)["\']', equipment_tag, re.IGNORECASE)
-                level = level_match.group(1) if level_match else "N/A"
-                
-                equipment_dict[equip_id.strip()] = {
-                    'cost': cost.strip(),
-                    'level': level.strip()
-                }
-                
-    except Exception as e:
-        # 静默处理错误
-        pass
-    
-    return equipment_dict
-
-def get_equipment_cost(weapon_id, mod_folder_path):
-    """获取武器的研发所需cost"""
-    if not mod_folder_path:
-        return "N/A"
-    
-    # 查找_stat.txt文件
-    stat_files = find_stat_files(mod_folder_path)
-    
-    if not stat_files:
-        return "N/A"
-    
-    # 遍历所有_stat.txt文件，查找匹配的equipId
-    for stat_file in stat_files:
-        equipment_dict = parse_stat_file_for_equipment(stat_file)
-        
-        if weapon_id in equipment_dict:
-            return equipment_dict[weapon_id]['cost']
-    
-    return "N/A"
-
 def extract_weapon_info(file_path, root_path):
     """从文件中提取weapon信息"""
     weapons = []
@@ -297,21 +111,14 @@ def extract_weapon_info(file_path, root_path):
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
             content = file.read()
             
-        # 使用正则表达式匹配weapon块
         weapon_pattern = r'<equipment\s+id="([^"]*)"\s+type="weapon">(.*?)</equipment>'
         weapon_matches = re.findall(weapon_pattern, content, re.DOTALL | re.IGNORECASE)
         
-        # 获取模组文件夹和修改时间
-        mod_folder, mod_time, mod_folder_path = get_mod_folder_and_time(file_path, root_path)
-        
-        # 截取模组文件夹名前15位
+        mod_folder, mod_time, mod_folder_path = common.get_mod_folder_and_time(file_path, root_path)
         short_mod_name = mod_folder[:15] if mod_folder else "Unknown"
-        
-        # 查找Equipment/xmls/cn目录
         xmls_cn_directory = find_xmls_cn_directory(mod_folder_path) if mod_folder_path else None
         
         for weapon_id, weapon_content in weapon_matches:
-            # 在weapon内容中查找range, attackSpeed, grade, name
             range_match = re.search(r'<range>([^<]*)</range>', weapon_content, re.IGNORECASE)
             attack_speed_match = re.search(r'<attackSpeed>([^<]*)</attackSpeed>', weapon_content, re.IGNORECASE)
             grade_match = re.search(r'<grade>([^<]*)</grade>', weapon_content, re.IGNORECASE)
@@ -322,17 +129,12 @@ def extract_weapon_info(file_path, root_path):
             grade_value = grade_match.group(1).strip() if grade_match else "N/A"
             name_id = name_match.group(1).strip() if name_match else "N/A"
             
-            # 映射等级
-            mapped_grade = map_grade(grade_value)
+            mapped_grade = common.map_grade(grade_value)
+            research_cost = common.get_equipment_details(weapon_id, mod_folder_path)['cost']
             
-            # 获取研发所需cost
-            research_cost = get_equipment_cost(weapon_id, mod_folder_path)
-            
-            # 检查是否需要调试：Depression模组或包含"_name"的武器名称
             debug_mode = ("Depression" in mod_folder) or (name_id and re.search(r'_name', name_id))
             
-            # 从xmls/cn目录解析name
-            weapon_name = name_id  # 默认使用name_id
+            weapon_name = name_id
             if name_id != "N/A" and xmls_cn_directory:
                 if debug_mode:
                     print(f"\n=== 调试 {mod_folder} ===")
@@ -348,13 +150,11 @@ def extract_weapon_info(file_path, root_path):
                 elif debug_mode:
                     print(f"解析失败: 未找到名称 '{name_id}'")
             elif name_id != "N/A" and debug_mode:
-                # 没有xmls/cn目录，但需要调试
                 print(f"\n=== 调试 {mod_folder} ===")
                 print(f"武器ID: {weapon_id}")
                 print(f"名称ID: {name_id}")
                 print(f"XML目录: 不存在")
             
-            # 格式化修改时间
             mod_time_str = ""
             if mod_time:
                 try:
@@ -365,50 +165,24 @@ def extract_weapon_info(file_path, root_path):
             weapons.append({
                 'id': weapon_id.strip(),
                 'name': weapon_name,
-                'range': range_value,  # 保留但不显示
-                'attackSpeed': attack_speed_value,  # 保留但不显示
+                'range': range_value,
+                'attackSpeed': attack_speed_value,
                 'grade': mapped_grade,
-                'research_cost': research_cost,  # 研发所需cost
+                'research_cost': research_cost,
                 'mod_folder': short_mod_name,
                 'mod_time': mod_time,
                 'mod_time_str': mod_time_str,
-                'name_id': name_id  # 保留原始的name_id用于调试
+                'name_id': name_id
             })
             
     except Exception as e:
-        # 静默处理所有错误
         pass
     
     return weapons
 
-def get_display_width(text):
-    """计算字符串在控制台中的显示宽度"""
-    if text is None:
-        return 0
-        
-    width = 0
-    for char in str(text):
-        # 中文字符通常占2个英文字符宽度
-        if '\u4e00' <= char <= '\u9fff':
-            width += 2
-        else:
-            width += 1
-    return width
-
-def pad_text(text, width):
-    """将文本填充到指定宽度，考虑中英文字符宽度差异"""
-    if text is None:
-        text = ""
-    text = str(text)
-    current_width = get_display_width(text)
-    if current_width >= width:
-        return text
-    return text + ' ' * (width - current_width)
-
 def main():
-    # 获取当前目录并解析符号链接
-    root_dir = get_search_root_from_config()
-    real_root_dir = resolve_symlink(root_dir)
+    root_dir = common.get_search_root_from_config()
+    real_root_dir = common.resolve_symlink(root_dir)
     
     print(f"原始目录: {root_dir}")
     print(f"真实目录: {real_root_dir}")
@@ -422,17 +196,13 @@ def main():
     all_weapons = []
     processed_files = 0
     
-    # 递归遍历所有文件和子目录，跟随符号链接
     for root, dirs, files in os.walk(real_root_dir, followlinks=True):
-        # 跳过 .git 目录以提高性能
         if '.git' in dirs:
             dirs.remove('.git')
         
         for file in files:
             file_path = os.path.join(root, file)
-            
-            # 检查是否应该处理该文件
-            if should_process_file(file_path):
+            if common.should_process_file(file_path):
                 weapons = extract_weapon_info(file_path, real_root_dir)
                 if weapons:
                     all_weapons.extend(weapons)
@@ -445,28 +215,25 @@ def main():
         print("在指定文件类型中未找到武器。")
         return
     
-    # 按模组文件夹修改时间排序（越早修改的越靠前）
     all_weapons.sort(key=lambda x: (x['mod_time'] if x['mod_time'] is not None else float('inf'), x['mod_folder']))
     
-    # 打印表头 - 更新为包含研发所需列
-    mod_header = pad_text("模组", 20)
-    time_header = pad_text("修改时间", 12)
-    id_header = pad_text("ID", 15)
-    name_header = pad_text("武器名称", 25)
-    grade_header = pad_text("等级", 8)
-    research_header = pad_text("研发所需", 12)
+    mod_header = common.pad_text("模组", 20)
+    time_header = common.pad_text("修改时间", 12)
+    id_header = common.pad_text("ID", 15)
+    name_header = common.pad_text("武器名称", 25)
+    grade_header = common.pad_text("等级", 8)
+    research_header = common.pad_text("研发所需", 12)
     
     print(f"{mod_header}{time_header}{id_header}{name_header}{grade_header}{research_header}")
     print("-" * 100)
     
-    # 打印每个weapon的信息
     for weapon in all_weapons:
-        mod_field = pad_text(weapon['mod_folder'], 20)
-        time_field = pad_text(weapon['mod_time_str'], 12)
-        id_field = pad_text(weapon['id'], 15)
-        name_field = pad_text(weapon['name'], 25)
-        grade_field = pad_text(weapon['grade'], 8)
-        research_field = pad_text(weapon['research_cost'], 12)
+        mod_field = common.pad_text(weapon['mod_folder'], 20)
+        time_field = common.pad_text(weapon['mod_time_str'], 12)
+        id_field = common.pad_text(weapon['id'], 15)
+        name_field = common.pad_text(weapon['name'], 25)
+        grade_field = common.pad_text(weapon['grade'], 8)
+        research_field = common.pad_text(weapon['research_cost'], 12)
         
         print(f"{mod_field}{time_field}{id_field}{name_field}{grade_field}{research_field}")
 

@@ -1,35 +1,8 @@
 import os
 import re
 import sys
-import json
 from datetime import datetime
-import configparser
-
-def get_search_root_from_config(default_root=None):
-    """从脚本所在目录的config.ini中读取target_scan_path，若失败则返回default_root"""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(script_dir, 'config.ini')
-    if os.path.isfile(config_path):
-        try:
-            config = configparser.ConfigParser()
-            config.read(config_path, encoding='utf-8')
-            path = config.get('CORE', 'target_scan_path', fallback=None)
-            if path:
-                path = path.strip()
-                # 相对路径转换为相对于脚本目录的绝对路径
-                if not os.path.isabs(path):
-                    path = os.path.join(script_dir, path)
-                return path
-        except Exception:
-            pass
-    return default_root if default_root is not None else os.getcwd()
-
-# 颜色代码
-class Colors:
-    YELLOW = '\033[93m'
-    RED = '\033[91m'
-    CYAN = '\033[96m'
-    RESET = '\033[0m'
+import common   # 导入公共模块
 
 def extract_equipment_ids_and_info(file_path):
     """
@@ -112,13 +85,13 @@ def process_files(file_paths_with_time):
     valid_files.sort(key=lambda x: x[3], reverse=True)
     
     if valid_files:
-        print(f"\n{Colors.YELLOW}文件名{Colors.RESET} {Colors.RED}weapon_ids{Colors.RESET} {Colors.CYAN}armor_ids{Colors.RESET}")
+        print(f"\n{common.Colors.YELLOW}文件名{common.Colors.RESET} {common.Colors.RED}weapon_ids{common.Colors.RESET} {common.Colors.CYAN}armor_ids{common.Colors.RESET}")
         print("-" * 60)
         
         for filename, weapon_str, armor_str, mtime, file_path, file_info in valid_files:
-            colored_filename = f"{Colors.YELLOW}{filename}{Colors.RESET}"
-            colored_weapon = f"{Colors.RED}{weapon_str}{Colors.RESET}" if weapon_str else ""
-            colored_armor = f"{Colors.CYAN}{armor_str}{Colors.RESET}" if armor_str else ""
+            colored_filename = f"{common.Colors.YELLOW}{filename}{common.Colors.RESET}"
+            colored_weapon = f"{common.Colors.RED}{weapon_str}{common.Colors.RESET}" if weapon_str else ""
+            colored_armor = f"{common.Colors.CYAN}{armor_str}{common.Colors.RESET}" if armor_str else ""
             
             print(f"{colored_filename} {colored_weapon} {colored_armor}")
         
@@ -132,7 +105,7 @@ def process_files(file_paths_with_time):
         
         single_letter_files = [f for f in valid_files if len(f[0]) == 1]
         if single_letter_files:
-            print(f"\n{Colors.YELLOW}单字母文件详细信息:{Colors.RESET}")
+            print(f"\n{common.Colors.YELLOW}单字母文件详细信息:{common.Colors.RESET}")
             for filename, weapon_str, armor_str, mtime, file_path, file_info in single_letter_files:
                 print(f"\n文件: {filename}")
                 print(f"  路径: {file_path}")
@@ -149,7 +122,7 @@ def main():
     """
     主函数 - 支持命令行参数和递归搜索
     """
-    default_root = get_search_root_from_config()
+    default_root = common.get_search_root_from_config()
     
     if len(sys.argv) > 1:
         file_paths_with_time = []
