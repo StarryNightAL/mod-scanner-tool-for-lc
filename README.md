@@ -10,6 +10,7 @@
 
 ## 运行环境
 - Python 版本 >= 3.6
+- 无需安装第三方依赖包
 
 ## 使用方法
 
@@ -17,7 +18,7 @@
 2. 编辑 `config.ini`，设置你的 Mod 搜索目录
 3. 运行任意脚本，例如：
    ```bash
-   python "1A-1-递归搜索-EquipmentID.py"
+   python3 "1A-6-5-EGOWeaponSearchTool.py"
    ```
    
 ## 致谢 & 辅助工具
