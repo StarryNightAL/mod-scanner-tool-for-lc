@@ -1,66 +1,8 @@
 import os
 import re
 import sys
-import xml.etree.ElementTree as ET
 from datetime import datetime
 import common   # 导入公共模块
-
-# 注意：以下两个函数是特有路径 "xmls/cn"，与common不同，保留
-def find_xmls_cn_directory(mod_folder_path):
-    """在模组文件夹中查找xmls/cn目录（注意：不是Equipment/xmls/cn）"""
-    if not mod_folder_path or not os.path.exists(mod_folder_path):
-        return None
-    xmls_cn_path = os.path.join(mod_folder_path, "xmls", "cn")
-    if os.path.exists(xmls_cn_path) and os.path.isdir(xmls_cn_path):
-        return xmls_cn_path
-    return None
-
-def parse_name_from_xmls(name_id, xmls_cn_directory):
-    """从xmls/cn目录的.xml文件中解析name_id对应的文本（注意：不是Equipment/xmls/cn）"""
-    if not xmls_cn_directory or not os.path.exists(xmls_cn_directory):
-        return None
-    
-    xml_files = []
-    for file in os.listdir(xmls_cn_directory):
-        if file.lower().endswith('.xml'):
-            xml_files.append(os.path.join(xmls_cn_directory, file))
-    
-    if len(xml_files) == 0:
-        return None
-    elif len(xml_files) > 1:
-        print(f"警告: 在{xmls_cn_directory}中发现多个.xml文件，跳过名称解析")
-        return None
-    
-    xml_file = xml_files[0]
-    try:
-        with open(xml_file, 'r', encoding='utf-8', errors='ignore') as f:
-            content = f.read()
-        
-        pattern = rf'<text\s+id="{re.escape(name_id)}"[^>]*>([^<]+)</text>'
-        match = re.search(pattern, content)
-        if match:
-            return match.group(1).strip()
-        
-        try:
-            if content.startswith('\ufeff'):
-                content = content[1:]
-            root = ET.fromstring(content)
-            for elem in root.iter():
-                if elem.tag == 'text' and elem.get('id') == name_id:
-                    text = elem.text
-                    return text.strip() if text else None
-        except ET.ParseError:
-            pass
-        
-        pattern2 = rf'<[^>]+\s+id="{re.escape(name_id)}"[^>]*>([^<]+)</[^>]+>'
-        match2 = re.search(pattern2, content)
-        if match2:
-            return match2.group(1).strip()
-        
-    except Exception:
-        pass
-    
-    return None
 
 def extract_weapon_info(file_path, root_path):
     """从文件中提取weapon信息"""
@@ -75,7 +17,7 @@ def extract_weapon_info(file_path, root_path):
         
         mod_folder, mod_time, mod_folder_path = common.get_mod_folder_and_time(file_path, root_path)
         short_mod_name = mod_folder[:15] if mod_folder else "Unknown"
-        xmls_cn_directory = find_xmls_cn_directory(mod_folder_path) if mod_folder_path else None
+        localization_dir = common.find_localization_directory(mod_folder_path, 'cn') if mod_folder_path else None
         
         for weapon_id, weapon_content in weapon_matches:
             range_match = re.search(r'<range>([^<]*)</range>', weapon_content, re.IGNORECASE)
@@ -91,19 +33,14 @@ def extract_weapon_info(file_path, root_path):
             mapped_grade = common.map_grade(grade_value)
             
             weapon_name = name_id
-            if name_id != "N/A" and xmls_cn_directory:
-                parsed_name = parse_name_from_xmls(name_id, xmls_cn_directory)
+            if name_id != "N/A" and localization_dir:
+                parsed_name = common.parse_name_from_xmls(name_id, localization_dir)
                 if parsed_name:
                     weapon_name = parsed_name
                     if "Depression_Weapon_Name" in name_id:
                         print(f"调试: 找到名称 '{parsed_name}' 对应 ID '{name_id}'")
             
-            mod_time_str = ""
-            if mod_time:
-                try:
-                    mod_time_str = datetime.fromtimestamp(mod_time).strftime('%m-%d %H:%M')
-                except:
-                    mod_time_str = ""
+            mod_time_str = common.format_mod_time(mod_time)
             
             weapons.append({
                 'id': weapon_id.strip(),
@@ -130,7 +67,7 @@ def main():
     print(f"真实目录: {real_root_dir}")
     print("正在搜索武器信息...")
     print("仅处理 .txt 和 .xml 文件，跳过 BaseEquipment.txt")
-    print("将从xmls/cn目录解析武器名称")
+    print("将从Equipment/xmls/cn目录解析武器名称")
     print("-" * 120)
     
     all_weapons = []
@@ -148,7 +85,7 @@ def main():
                     all_weapons.extend(weapons)
                     processed_files += 1
     
-    print(f"处理了 {processed_files} 个文件，找到 {len(all_weapons)} 个武器")
+    print(f"\n处理了 {processed_files} 个文件，找到 {len(all_weapons)} 个武器")
     print()
     
     if not all_weapons:

@@ -10,30 +10,20 @@ import common   # 导入公共模块
 # 从config读取搜索根目录
 SEARCH_ROOT = common.get_search_root_from_config()
 
-# 要忽略的文件夹
+# 要忽略的文件夹（按模组名称匹配）
 IGNORE_FOLDERS = [
     "ColoredFixerMod-ReturnoftheRedmist-423-2-3-1758101187",
     "TwilightRemakeMod-426-1-2-1758016480",
     "SolemnLamentRemake2.0Mod-570-1-2-1757941956"
 ]
 
-def get_upstream_folder_mod_time(file_path):
-    """获取上游文件夹修改时间"""
-    path_parts = Path(file_path).parts
-    
-    if len(path_parts) > 1:
-        if path_parts[0] == '.':
-            if len(path_parts) > 1:
-                upstream_folder = path_parts[1]
-            else:
-                upstream_folder = file_path
-        else:
-            upstream_folder = path_parts[0]
-    else:
-        upstream_folder = file_path
-    
-    upstream_abs_path = os.path.abspath(upstream_folder)
-    return os.path.getmtime(upstream_abs_path), upstream_folder
+def should_ignore_file(file_path):
+    """检查文件是否在忽略的文件夹中（完全基于 common.get_mod_folder_and_time）"""
+    mod_folder, _, _ = common.get_mod_folder_and_time(file_path, SEARCH_ROOT)
+    for ignore_folder in IGNORE_FOLDERS:
+        if ignore_folder in mod_folder:
+            return True
+    return False
 
 def parse_bonus_content(bonus_content):
     """解析bonus内容"""
@@ -73,66 +63,6 @@ def format_value(value):
     else:
         return f"{common.Colors.WHITE}{value:>5}{common.Colors.END}"
 
-def should_ignore_file(file_path):
-    """检查文件是否在忽略的文件夹中"""
-    for ignore_folder in IGNORE_FOLDERS:
-        if ignore_folder in file_path:
-            return True
-    return False
-
-def extract_chinese_name(file_path, name_id):
-    """
-    从对应XML文件中提取中文名称
-    现在需要装备的name_id作为参数
-    """
-    try:
-        base_name = os.path.splitext(os.path.basename(file_path))[0]
-        file_dir = os.path.dirname(file_path)
-        parent_dir = os.path.dirname(file_dir)
-        xml_dir = os.path.join(parent_dir, "xmls", "cn")
-        
-        if not name_id:
-            return "", xml_dir, "no_name_id"
-        
-        if os.path.exists(xml_dir):
-            xml_files = [f for f in os.listdir(xml_dir) if f.endswith(('.xml', '.txt'))]
-            
-            for xml_file in xml_files:
-                xml_path = os.path.join(xml_dir, xml_file)
-                try:
-                    tree = ET.parse(xml_path)
-                    root = tree.getroot()
-                    
-                    for elem in root.findall(".//text"):
-                        if elem.get('id') == name_id:
-                            return elem.text, xml_path, "success"
-                    
-                    for elem in root.findall(".//text"):
-                        elem_id = elem.get('id', '')
-                        if name_id in elem_id:
-                            return elem.text, xml_path, f"success (partial match: {elem_id})"
-                            
-                except ET.ParseError:
-                    try:
-                        with open(xml_path, 'r', encoding='utf-8') as f:
-                            content = f.read()
-                        
-                        pattern = f'<text id="{name_id}">([^<]*)</text>'
-                        match = re.search(pattern, content)
-                        if match:
-                            return match.group(1), xml_path, "success (regex)"
-                    except:
-                        continue
-                except Exception:
-                    continue
-            
-            return "", xml_dir, f"name_id_not_found (tried: {', '.join(xml_files)})"
-        else:
-            return "", xml_dir, "directory_not_found"
-                
-    except Exception as e:
-        return "", "", f"error: {str(e)}"
-
 def extract_equipment_info():
     """递归搜索并提取饰品信息"""
     results = []
@@ -149,19 +79,20 @@ def extract_equipment_info():
         file_paths.extend(glob.glob(pattern, recursive=True))
     
     file_paths = list(set(file_paths))
-    
     file_paths = [f for f in file_paths if not should_ignore_file(f)]
     
-    file_paths_with_upstream = []
+    # 直接用 common.get_mod_folder_and_time 获取排序依据
+    file_infos = []
     for file_path in file_paths:
-        upstream_mod_time, upstream_folder = get_upstream_folder_mod_time(file_path)
-        file_paths_with_upstream.append((file_path, upstream_mod_time, upstream_folder))
+        mod_folder, mod_time, mod_folder_path = common.get_mod_folder_and_time(file_path, SEARCH_ROOT)
+        file_infos.append((file_path, mod_time, mod_folder, mod_folder_path))
     
-    file_paths_with_upstream.sort(key=lambda x: x[1])
+    # 按修改时间排序
+    file_infos.sort(key=lambda x: x[1] if x[1] is not None else 0)
     
     file_accessory_count = {}
     
-    for file_path, upstream_mod_time, upstream_folder in file_paths_with_upstream:
+    for file_path, mod_time, mod_folder, mod_folder_path in file_infos:
         try:
             with open(file_path, 'r', encoding='utf-8') as file:
                 content = file.read()
@@ -177,9 +108,28 @@ def extract_equipment_info():
             
             file_accessory_count[file_path] = len(equipment_matches)
             
+            # --- 使用 common 查找标准本地化目录 ---
+            localization_dir = common.find_localization_directory(mod_folder_path, 'cn') if mod_folder_path else None
+            
             for equipment_id, equipment_content in equipment_matches:
                 name_id = extract_equipment_name(equipment_content)
-                chinese_name, xml_path, status = extract_chinese_name(file_path, name_id)
+                
+                # --- 使用 common.parse_name_from_xmls 解析中文名（带溯源） ---
+                chinese_name = ""
+                status = "no_localization_dir"
+                if name_id and localization_dir:
+                    name_result, source_file = common.parse_name_from_xmls(
+                        name_id, localization_dir, return_source=True
+                    )
+                    if name_result:
+                        chinese_name = name_result
+                        status = f"found_in_{os.path.basename(source_file)}"
+                    else:
+                        status = "name_id_not_found"
+                elif name_id:
+                    status = "localization_dir_missing"
+                else:
+                    status = "no_name_id"
                 
                 bonus_match = re.search(r'<bonus>(.*?)</bonus>', equipment_content, re.DOTALL)
                 if bonus_match:
@@ -190,6 +140,9 @@ def extract_equipment_info():
                 attach_pos = extract_attach_pos(equipment_content)
                 attach_type = extract_attach_type(equipment_content)
                 
+                # 格式化修改时间（统一使用 common 的工具）
+                mod_time_str = common.format_mod_time(mod_time)
+                
                 results.append({
                     'file': file_path,
                     'equipment_id': equipment_id,
@@ -199,7 +152,9 @@ def extract_equipment_info():
                     'attributes': attributes,
                     'chinese_name': chinese_name,
                     'status': status,
-                    'upstream_mod_time': upstream_mod_time,
+                    'mod_time': mod_time,
+                    'mod_time_str': mod_time_str,
+                    'mod_folder': mod_folder,
                     'file_accessory_count': file_accessory_count[file_path]
                 })
             
@@ -209,13 +164,13 @@ def extract_equipment_info():
             print(f"处理文件 {file_path} 时出错: {e}")
             continue
     
-    results.sort(key=lambda x: x['upstream_mod_time'])
+    results.sort(key=lambda x: x['mod_time'] if x['mod_time'] is not None else 0)
     return results, file_accessory_count
 
 def display_results(results, file_accessory_count):
     """显示结果"""
     print("\n" + "="*120)
-    print(f"{common.Colors.BOLD}饰品详细信息 (按上游文件夹修改时间排序):{common.Colors.END}")
+    print(f"{common.Colors.BOLD}饰品详细信息 (按模组修改时间排序):{common.Colors.END}")
     print("="*120)
     
     header = f"{common.Colors.BOLD}{'文件':<25} {'ID':>10} {'位置':>10} {'类型':>8} {'生命':>5} {'精神':>5} {'成功率':>6} {'工作速度':>6} {'攻击速度':>5} {'移动速度':>6}{common.Colors.END}"

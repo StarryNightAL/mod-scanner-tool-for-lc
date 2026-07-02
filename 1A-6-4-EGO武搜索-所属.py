@@ -1,247 +1,8 @@
 import os
 import re
 import sys
-import xml.etree.ElementTree as ET
 from datetime import datetime
 import common   # 导入公共模块
-
-# 注意：以下两个函数是特有路径 "Equipment/xmls/cn"，与common不同，保留
-def find_xmls_cn_directory(mod_folder_path):
-    """在模组文件夹中查找Equipment/xmls/cn目录"""
-    if not mod_folder_path or not os.path.exists(mod_folder_path):
-        print(f"调试: 模组文件夹不存在: {mod_folder_path}")
-        return None
-    xmls_cn_path = os.path.join(mod_folder_path, "Equipment", "xmls", "cn")
-    print(f"调试: 尝试查找XML目录: {xmls_cn_path}")
-    if os.path.exists(xmls_cn_path) and os.path.isdir(xmls_cn_path):
-        print(f"调试: 找到XML目录: {xmls_cn_path}")
-        return xmls_cn_path
-    else:
-        print(f"调试: XML目录不存在: {xmls_cn_path}")
-    return None
-
-def parse_name_from_xmls(name_id, xmls_cn_directory, debug=False):
-    """从xmls/cn目录的.xml文件中解析name_id对应的文本 - 保留特有逻辑"""
-    if not xmls_cn_directory or not os.path.exists(xmls_cn_directory):
-        print(f"调试: xmls/cn目录不存在: {xmls_cn_directory}")
-        return None
-    
-    xml_files = []
-    for file in os.listdir(xmls_cn_directory):
-        if file.lower().endswith('.xml'):
-            xml_files.append(os.path.join(xmls_cn_directory, file))
-    
-    print(f"调试: 在 {xmls_cn_directory} 中找到 {len(xml_files)} 个XML文件")
-    for f in xml_files:
-        print(f"  - {os.path.basename(f)}")
-    
-    if len(xml_files) == 0:
-        print(f"调试: 在{xmls_cn_directory}中没有找到XML文件")
-        return None
-    elif len(xml_files) > 1:
-        if "ColoredFixerMod-ReturnoftheRedmist" not in xmls_cn_directory:
-            print(f"警告: 在{xmls_cn_directory}中发现多个.xml文件，跳过名称解析")
-        return None
-    
-    xml_file = xml_files[0]
-    
-    print(f"调试: 解析XML文件: {xml_file}")
-    print(f"调试: 查找ID: {name_id}")
-    
-    try:
-        try:
-            tree = ET.parse(xml_file)
-            root = tree.getroot()
-            print(f"调试: XML根元素: {root.tag}")
-            for elem in root.iter():
-                elem_id = elem.get('id')
-                if elem_id == name_id:
-                    text = elem.text
-                    print(f"调试: 找到匹配元素 - 标签: {elem.tag}, ID: {elem_id}, 文本: {text}")
-                    return text.strip() if text else None
-        except ET.ParseError as e:
-            print(f"调试: ElementTree解析失败: {e}")
-        
-        with open(xml_file, 'r', encoding='utf-8', errors='ignore') as f:
-            content = f.read()
-            
-        print(f"调试: XML文件大小: {len(content)} 字符")
-        
-        pattern = rf'<text\s+id\s*=\s*["\']{re.escape(name_id)}["\'][^>]*>(.*?)</text>'
-        match = re.search(pattern, content, re.DOTALL | re.IGNORECASE)
-        if match:
-            text = match.group(1).strip()
-            print(f"调试: 通过正则找到文本: {text}")
-            return text
-        
-        pattern2 = rf'<[^>]+\s+id\s*=\s*["\']{re.escape(name_id)}["\'][^>]*>(.*?)</[^>]+>'
-        match2 = re.search(pattern2, content, re.DOTALL | re.IGNORECASE)
-        if match2:
-            text = match2.group(1).strip()
-            print(f"调试: 通过宽泛正则找到文本: {text}")
-            return text
-            
-        print(f"调试: 在XML文件中搜索包含'{name_id}'的行:")
-        lines = content.split('\n')
-        found = False
-        for i, line in enumerate(lines[:50]):
-            if name_id in line:
-                print(f"  第{i+1}行: {line.strip()}")
-                found = True
-        if not found:
-            print(f"  未找到包含'{name_id}'的行")
-            
-    except Exception as e:
-        print(f"调试: 解析XML时发生错误: {e}")
-    
-    print(f"调试: 未找到ID为'{name_id}'的文本")
-    return None
-
-def get_creature_id_from_creature_list(script_name, mod_folder_path):
-    """从Creature/CreatureList/*.txt文件中查找creature ID"""
-    if not script_name or not mod_folder_path:
-        print(f"调试: script_name或mod_folder_path为空")
-        return None
-    
-    creature_list_path = os.path.join(mod_folder_path, "Creature", "CreatureList")
-    print(f"调试: 尝试查找CreatureList目录: {creature_list_path}")
-    
-    if not os.path.exists(creature_list_path):
-        print(f"调试: Creature/CreatureList目录不存在: {creature_list_path}")
-        return None
-    
-    creature_list_files = []
-    for file in os.listdir(creature_list_path):
-        if file.lower().endswith('.txt'):
-            creature_list_files.append(os.path.join(creature_list_path, file))
-    
-    print(f"调试: 在CreatureList目录中找到 {len(creature_list_files)} 个.txt文件")
-    if not creature_list_files:
-        print(f"调试: CreatureList目录中没有.txt文件")
-        return None
-    
-    for file_path in creature_list_files:
-        try:
-            print(f"调试: 检查文件: {file_path}")
-            with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
-                content = file.read()
-            print(f"调试: 文件大小: {len(content)} 字符")
-            pattern = rf'<creature\s+[^>]*?\s+name\s*=\s*["\']{re.escape(script_name)}["\'][^>]*?>'
-            matches = re.findall(pattern, content, re.IGNORECASE)
-            print(f"调试: 找到 {len(matches)} 个匹配的creature标签")
-            for match in matches:
-                id_match = re.search(r'id\s*=\s*["\']([^"\']*)["\']', match)
-                if id_match:
-                    creature_id = id_match.group(1).strip()
-                    print(f"调试: 找到creature ID: {creature_id}")
-                    return creature_id
-        except Exception as e:
-            print(f"调试: 读取文件{file_path}时发生错误: {e}")
-            continue
-    
-    print(f"调试: 未找到name为'{script_name}'的creature标签")
-    return None
-
-def get_creature_name_from_creature_info(creature_id, mod_folder_path):
-    """从Creature/CreatureInfo/cn/*.txt或*.xml文件中查找creature名称"""
-    if not creature_id or not mod_folder_path:
-        print(f"调试: creature_id或mod_folder_path为空")
-        return None
-    
-    creature_info_path = os.path.join(mod_folder_path, "Creature", "CreatureInfo", "cn")
-    print(f"调试: 尝试查找CreatureInfo/cn目录: {creature_info_path}")
-    
-    if not os.path.exists(creature_info_path):
-        print(f"调试: Creature/CreatureInfo/cn目录不存在: {creature_info_path}")
-        return None
-    
-    creature_info_files = []
-    for file in os.listdir(creature_info_path):
-        if file.lower().endswith('.txt') or file.lower().endswith('.xml'):
-            creature_info_files.append(os.path.join(creature_info_path, file))
-    
-    print(f"调试: 在CreatureInfo/cn目录中找到 {len(creature_info_files)} 个文件")
-    if not creature_info_files:
-        print(f"调试: CreatureInfo/cn目录中没有.txt或.xml文件")
-        return None
-    
-    for file_path in creature_info_files:
-        try:
-            print(f"调试: 检查文件: {file_path}")
-            with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
-                content = file.read()
-            print(f"调试: 文件大小: {len(content)} 字符")
-            pattern = rf'<info\s+id\s*=\s*["\']{re.escape(creature_id)}["\'][^>]*?>(.*?)</info>'
-            info_matches = re.findall(pattern, content, re.DOTALL | re.IGNORECASE)
-            print(f"调试: 找到 {len(info_matches)} 个匹配的info标签")
-            if info_matches:
-                info_content = info_matches[-1]
-                name_pattern = r'<name\s+openLevel\s*=\s*["\'][^"\']*["\'][^>]*?>(.*?)</name>'
-                name_matches = re.findall(name_pattern, info_content, re.DOTALL | re.IGNORECASE)
-                print(f"调试: 在info块中找到 {len(name_matches)} 个name标签")
-                if name_matches:
-                    last_name_text = name_matches[-1].strip()
-                    last_name_text = re.sub(r'\s+', ' ', last_name_text)
-                    print(f"调试: 最后一个name标签文本: '{last_name_text}'")
-                    return last_name_text
-        except Exception as e:
-            print(f"调试: 读取文件{file_path}时发生错误: {e}")
-            continue
-    
-    print(f"调试: 在所有文件中都未找到id为'{creature_id}'的info标签")
-    return None
-
-def get_equipment_info(weapon_id, mod_folder_path):
-    """获取武器的研发所需cost和所属creature名称 - 保留特有调试版本"""
-    print(f"\n{'='*60}")
-    print(f"调试: 开始处理武器ID: {weapon_id}")
-    print(f"调试: 模组文件夹: {mod_folder_path}")
-    
-    if not mod_folder_path:
-        print(f"调试: 模组文件夹路径不存在")
-        print(f"{'='*60}")
-        return {"cost": "N/A", "belongs_to": "N/A"}
-    
-    stat_files = common.find_stat_files(mod_folder_path)
-    if not stat_files:
-        print(f"调试: 未找到stat文件")
-        print(f"{'='*60}")
-        return {"cost": "N/A", "belongs_to": "N/A"}
-    
-    for stat_file in stat_files:
-        equipment_dict = common.parse_stat_file_for_equipment(stat_file)
-        print(f"调试: 在文件{stat_file}中找到 {len(equipment_dict)} 个equipment条目")
-        if weapon_id in equipment_dict:
-            equipment_info = equipment_dict[weapon_id]
-            cost = equipment_info['cost']
-            script_name = equipment_info.get('script_name')
-            print(f"调试: 匹配到武器ID {weapon_id}")
-            print(f"调试: cost: {cost}, script_name: {script_name}")
-            belongs_to = "N/A"
-            if script_name:
-                print(f"调试: 开始根据script_name '{script_name}' 查找creature")
-                creature_id = get_creature_id_from_creature_list(script_name, mod_folder_path)
-                if creature_id:
-                    print(f"调试: 获取到的creature_id: {creature_id}")
-                    creature_name = get_creature_name_from_creature_info(creature_id, mod_folder_path)
-                    if creature_name:
-                        print(f"调试: 获取到的creature_name: {creature_name}")
-                        belongs_to = creature_name
-                    else:
-                        print(f"调试: 未找到creature_name")
-                else:
-                    print(f"调试: 未找到creature_id")
-            else:
-                print(f"调试: 未找到script_name")
-            print(f"调试: 处理完成 - cost: {cost}, belongs_to: {belongs_to}")
-            print(f"{'='*60}")
-            return {"cost": cost, "belongs_to": belongs_to}
-        else:
-            print(f"调试: 武器ID {weapon_id} 在该stat文件中未找到匹配")
-    
-    print(f"调试: 在所有stat文件中均未找到武器ID {weapon_id}")
-    print(f"{'='*60}")
-    return {"cost": "N/A", "belongs_to": "N/A"}
 
 def extract_weapon_info(file_path, root_path):
     """从文件中提取weapon信息"""
@@ -262,7 +23,7 @@ def extract_weapon_info(file_path, root_path):
         print(f"{'#'*60}")
         
         short_mod_name = mod_folder[:15] if mod_folder else "Unknown"
-        xmls_cn_directory = find_xmls_cn_directory(mod_folder_path) if mod_folder_path else None
+        localization_dir = common.find_localization_directory(mod_folder_path, 'cn') if mod_folder_path else None
         
         for weapon_id, weapon_content in weapon_matches:
             print(f"\n--- 处理武器ID: {weapon_id} ---")
@@ -278,14 +39,16 @@ def extract_weapon_info(file_path, root_path):
             
             print(f"武器基本信息 - ID: {weapon_id}, name_id: {name_id}, grade: {grade_value}")
             mapped_grade = common.map_grade(grade_value)
-            equipment_info = get_equipment_info(weapon_id, mod_folder_path)
+            
+            # 使用 common 统一接口获取研发成本和所属
+            equipment_info = common.get_equipment_details(weapon_id, mod_folder_path)
             research_cost = equipment_info["cost"]
             belongs_to = equipment_info["belongs_to"]
             
             weapon_name = name_id
-            if name_id != "N/A" and xmls_cn_directory:
+            if name_id != "N/A" and localization_dir:
                 print(f"调试: 尝试解析名称ID: {name_id}")
-                parsed_name = parse_name_from_xmls(name_id, xmls_cn_directory, debug=True)
+                parsed_name = common.parse_name_from_xmls(name_id, localization_dir, debug=True)
                 if parsed_name:
                     weapon_name = parsed_name
                     print(f"调试: 解析成功: {name_id} -> {parsed_name}")
@@ -294,12 +57,7 @@ def extract_weapon_info(file_path, root_path):
             elif name_id != "N/A":
                 print(f"调试: XML目录不存在，无法解析名称")
             
-            mod_time_str = ""
-            if mod_time:
-                try:
-                    mod_time_str = datetime.fromtimestamp(mod_time).strftime('%m-%d %H:%M')
-                except:
-                    mod_time_str = ""
+            mod_time_str = common.format_mod_time(mod_time)
             
             weapons.append({
                 'id': weapon_id.strip(),
@@ -331,7 +89,6 @@ def main():
     print("将从Equipment/xmls/cn目录解析武器名称")
     print("从Creature/Creatures/*_stat.txt文件提取研发所需cost")
     print("追踪武器所属生物信息")
-    print("注意: 已跳过ColoredFixerMod-ReturnoftheRedmist的多个XML文件警告")
     print("=" * 130)
     
     all_weapons = []

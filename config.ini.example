@@ -1,2 +1,2 @@
 [CORE]
-target_scan_path = /path/to/target
+target_scan_path=/path/to/your/target
