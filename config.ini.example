@@ -1,2 +1,5 @@
 [CORE]
 target_scan_path=/path/to/your/target
+
+[SCAN]
+scan_original_file = false

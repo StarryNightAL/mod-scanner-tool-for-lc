@@ -52,10 +52,28 @@ def map_grade(grade_value):
 def should_process_file(file_path):
     """判断是否应该处理该文件"""
     filename = os.path.basename(file_path)
-    # 跳过 BaseEquipment.txt 文件
+    
+    # 特殊处理 BaseEquipment.txt
     if filename.lower() == "baseequipment.txt":
-        return False
-    # 只处理 .txt 和 .xml 文件
+        # 获取调用者脚本目录下的 config.ini
+        caller_frame = inspect.currentframe().f_back
+        caller_file = caller_frame.f_globals.get('__file__')
+        if caller_file:
+            script_dir = os.path.dirname(os.path.abspath(caller_file))
+        else:
+            script_dir = os.getcwd()
+        
+        config_path = os.path.join(script_dir, 'config.ini')
+        if os.path.isfile(config_path):
+            config = configparser.ConfigParser()
+            config.read(config_path, encoding='utf-8')
+            try:
+                return config.getboolean('SCAN', 'scan_original_file', fallback=False)
+            except Exception:
+                return False
+        return False  # 默认跳过
+    
+    # 其他文件：只处理 .txt 和 .xml
     ext = os.path.splitext(file_path)[1].lower()
     return ext in ('.txt', '.xml')
 
